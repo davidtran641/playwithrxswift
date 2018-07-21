@@ -58,12 +58,19 @@ class WindowViewController: UIViewController {
     
     _ = sourceObservable.subscribe(sourceTimeline)
     
-    _ = sourceObservable
+    let windowObserable = sourceObservable
       .window(timeSpan: windowTimeSpan, count: windowMaxCount, scheduler: MainScheduler.instance)
-      .flatMap { windowObservable -> Observable<(TimelineView<Int>, String?)> in
-        let timeline = TimelineView<Int>.make()
+    
+    let timeline = windowObserable
+      .map {_ -> TimelineView<Int> in TimelineView<Int>.make()}
+      .do(onNext: { timeline in
         stack.insert(timeline, at: 4)
         stack.keep(atMost: 7)
+      })
+    
+    _ = Observable
+      .zip(timeline, windowObserable, resultSelector: { ($0, $1)})
+      .flatMap { (timeline, windowObservable) -> Observable<(TimelineView<Int>, String?)> in
         return windowObservable
           .map { value in (timeline, value) }
           .concat(Observable.just((timeline, nil)))
