@@ -38,29 +38,30 @@ class ViewController: UIViewController {
     super.viewDidLoad()
     style()
     
-    let search = searchCityName.rx.text
+    let search = searchCityName.rx.controlEvent(.editingDidEndOnExit).asObservable()
+      .map { [weak self] in self?.searchCityName.text }
       .filter { ($0 ?? "").count > 0 }
       .flatMap { text in
         return ApiController.shared.currentWeather(city: text ?? "Error")
           .catchErrorJustReturn(ApiController.Weather.empty)
       }
-      .share(replay: 1, scope: .whileConnected)
-      .observeOn(MainScheduler.instance)
+      .asDriver(onErrorJustReturn: ApiController.Weather.empty)
+      
       
     search.map { "\($0.temperature)° C" }
-      .bind(to: tempLabel.rx.text)
+      .drive(tempLabel.rx.text)
       .disposed(by: bag)
     
     search.map { $0.icon }
-      .bind(to: iconLabel.rx.text)
+      .drive(iconLabel.rx.text)
       .disposed(by: bag)
     
     search.map { "\($0.humidity)%" }
-      .bind(to: humidityLabel.rx.text)
+      .drive(humidityLabel.rx.text)
       .disposed(by: bag)
       
     search.map { $0.cityName }
-      .bind(to: cityNameLabel.rx.text)
+      .drive(cityNameLabel.rx.text)
       .disposed(by: bag)
 
   }
