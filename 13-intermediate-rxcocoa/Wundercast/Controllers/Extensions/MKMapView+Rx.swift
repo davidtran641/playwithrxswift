@@ -24,3 +24,50 @@ import Foundation
 import MapKit
 import RxSwift
 import RxCocoa
+
+extension MKMapView: HasDelegate {
+  
+  public typealias Delegate = MKMapViewDelegate
+}
+
+class RxMKMapViewDelegateProxy: DelegateProxy<MKMapView, MKMapViewDelegate>, DelegateProxyType, MKMapViewDelegate {
+
+  public weak private(set) var mapview: MKMapView?
+  public init(mapview: ParentObject) {
+    self.mapview = mapview
+    super.init(parentObject: mapview, delegateProxy: RxMKMapViewDelegateProxy.self)
+  }
+  
+  static func registerKnownImplementations() {
+    self.register { parent -> RxMKMapViewDelegateProxy in
+      return RxMKMapViewDelegateProxy(mapview: parent)
+    }
+  }
+
+}
+
+extension Reactive where Base: MKMapView {
+  
+  public var delegate: DelegateProxy<MKMapView, MKMapViewDelegate> {
+    return RxMKMapViewDelegateProxy.proxy(for: base)
+  }
+  
+  public func setDelegate(_ delegate: MKMapViewDelegate) -> Disposable {
+    return RxMKMapViewDelegateProxy.installForwardDelegate(delegate, retainDelegate: false, onProxyForObject: self.base)
+  }
+  
+  var overlays: Binder<[MKOverlay]> {
+    return Binder(base, binding: { (mapView, overlays) in
+      mapView.removeOverlays(mapView.overlays)
+      mapView.addOverlays(overlays)
+    })
+  }
+  
+  public var regionDidChangeAnimated: ControlEvent<Bool> {
+    let source = delegate.methodInvoked(#selector(MKMapViewDelegate.mapView(_:regionDidChangeAnimated:)))
+      .map { params in
+        return (params[1] as? Bool) ?? false
+      }
+    return ControlEvent(events: source)
+  }
+}
