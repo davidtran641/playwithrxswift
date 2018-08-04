@@ -159,6 +159,24 @@ class ViewController: UIViewController {
     search.map { [$0.overlay()] }
       .drive(mapView.rx.overlays)
       .disposed(by: bag)
+    
+    geoLocation.map { $0.coordinate }
+      .asDriver(onErrorJustReturn: CLLocationCoordinate2D(latitude: 0, longitude: 0))
+      .drive(mapView.rx.location)
+      .disposed(by: bag)
+    
+    textSearch.asDriver(onErrorJustReturn: ApiController.Weather.dummy)
+      .map { $0.coordinate }
+      .drive(mapView.rx.location)
+      .disposed(by: bag)
+    
+    mapInput.flatMap { coordinate in
+        return ApiController.shared.currentWeatherAround(lat: coordinate.latitude, lon: coordinate.longitude)
+        .catchErrorJustReturn([])
+      }.map { $0.map { $0.overlay() } }
+      .asDriver(onErrorJustReturn: [])
+      .drive(mapView.rx.overlays)
+      .disposed(by: bag)
   }
 
   override func viewDidAppear(_ animated: Bool) {
