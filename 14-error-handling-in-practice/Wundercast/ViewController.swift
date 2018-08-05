@@ -44,6 +44,8 @@ class ViewController: UIViewController {
   let locationManager = CLLocationManager()
 
   var keyTextField: UITextField?
+  
+  private var cache = [String: Weather]()
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -83,9 +85,41 @@ class ViewController: UIViewController {
       .map { self.searchCityName.text }
       .filter { ($0 ?? "").count > 0 }
 
+    let maxAttempts = 4
+    
     let textSearch = searchInput.flatMap { text in
       return ApiController.shared.currentWeather(city: text ?? "Error")
-        .catchErrorJustReturn(ApiController.Weather.empty)
+        .do(onNext: { data in
+          if let text = text {
+            self.cache[text] = data
+          }
+        }, onError: { [weak self] error in
+          guard let `self` = self else {
+            return
+          }
+          DispatchQueue.main.async {
+            self.showError(error)
+          }
+        })
+        .retryWhen { e in
+          e.enumerated().flatMap { (attempt, error) -> Observable<Int> in
+            if attempt >= maxAttempts - 1 {
+              return Observable.error(error)
+            } else if let error = error as? ApiController.ApiError, error == .invalidKey {
+              return ApiController.shared.apiKey.filter { $0 != "" }.map { _ in return 1 }
+            }
+            print("== retrying after \(attempt + 1) seconds ==")
+            return Observable<Int>.timer(Double(attempt + 1), scheduler: MainScheduler.instance).take(1)
+          }
+        }
+        .catchError { error in
+          if let text = text, let cachedData = self.cache[text] {
+            return Observable.just(cachedData)
+          } else {
+            return Observable.just(ApiController.Weather.empty)
+          }
+        }
+      
     }
 
     let search = Observable.from([geoSearch, textSearch])
@@ -121,6 +155,21 @@ class ViewController: UIViewController {
     running.drive(humidityLabel.rx.isHidden).disposed(by:bag)
     running.drive(cityNameLabel.rx.isHidden).disposed(by:bag)
 
+  }
+  
+  func showError(_ e: Error) {
+    if let e = e as? ApiController.ApiError {
+      switch (e) {
+      case .cityNotFound:
+        InfoView.showIn(viewController: self, message: "City Name is invalid")
+      case .serverFailure:
+        InfoView.showIn(viewController: self, message: "Server error")
+      case .invalidKey:
+        InfoView.showIn(viewController: self, message: "Key is invalid")
+      }
+    } else {
+      InfoView.showIn(viewController: self, message: "An error occurred")
+    }
   }
 
   override func viewDidAppear(_ animated: Bool) {
