@@ -107,6 +107,14 @@ class ViewController: UIViewController {
               return Observable.error(error)
             } else if let error = error as? ApiController.ApiError, error == .invalidKey {
               return ApiController.shared.apiKey.filter { $0 != "" }.map { _ in return 1 }
+            } else if (error as NSError).code == -1009 {
+              return RxReachability.shared.status
+                .filter {
+                  $0 == .online
+                }
+                .map { _ in
+                  return 1
+                }
             }
             print("== retrying after \(attempt + 1) seconds ==")
             return Observable<Int>.timer(Double(attempt + 1), scheduler: MainScheduler.instance).take(1)
@@ -155,6 +163,7 @@ class ViewController: UIViewController {
     running.drive(humidityLabel.rx.isHidden).disposed(by:bag)
     running.drive(cityNameLabel.rx.isHidden).disposed(by:bag)
 
+    _ = RxReachability.shared.startMonitor("openweathermap.org")
   }
   
   func showError(_ e: Error) {
