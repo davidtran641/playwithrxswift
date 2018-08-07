@@ -28,9 +28,45 @@ print("\n\n\n===== Schedulers =====\n")
 let globalScheduler = ConcurrentDispatchQueueScheduler(queue: DispatchQueue.global())
 let bag = DisposeBag()
 let animal = BehaviorSubject(value: "[dog]")
+let fruit = Observable<String>.create { observer in
+  observer.onNext("[apple]")
+  sleep(2)
+  observer.onNext("[pinapple]")
+  sleep(2)
+  observer.onNext("[strawberry]")
+  return Disposables.create()
+}
 
+let animalsThread = Thread() {
+  sleep(3)
+  animal.onNext("[cat]")
+  sleep(3)
+  animal.onNext("[tiger]")
+  sleep(3)
+  animal.onNext("[fox]")
+  sleep(3)
+  animal.onNext("[leopard]")
+}
+animalsThread.name = "Animals thread"
+animalsThread.start()
 
 animal
+  .subscribeOn(MainScheduler.instance)
+  .dump()
+  .observeOn(globalScheduler)
   .dump()
   .dumpingSubscription()
   .disposed(by: bag)
+
+fruit
+  .subscribeOn(globalScheduler)
+  .dump()
+  .observeOn(MainScheduler.instance)
+  .dump()
+  .dumpingSubscription()
+  .disposed(by: bag)
+
+
+RunLoop.main.run(until: Date(timeIntervalSinceNow: 13))
+
+
